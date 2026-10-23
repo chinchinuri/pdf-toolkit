@@ -1,493 +1,859 @@
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PDF Інструменти — Редактор та Розділювач</title>
-  
-  <!-- Бібліотеки для роботи з PDF та ZIP прямо в браузері -->
-  <script src="https://unpkg.com/pdf-lib@1.17.9/dist/pdf-lib.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<title>Палітурня PDF</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Unbounded:wght@500;700&display=swap">
+<style>
+/* Layout: bindery workbench — operations rail on the left, the sheet table (page grid) on the right; stitch-amber marks where a split will cut */
+:root{
+  --bg:#edf0f3; --surface:#ffffff; --surface-2:#f6f8fa; --ink:#18202b; --muted:#5c6776; --line:#d4dae2;
+  --accent:#2648c9; --accent-ink:#ffffff; --accent-soft:#e2e7fb; --stitch:#a8640a; --stitch-soft:#fbefdc;
+  --danger:#b42318; --danger-soft:#fde8e6; --paper:#ffffff; --shadow:0 1px 2px rgba(24,32,43,.08),0 2px 8px rgba(24,32,43,.06);
+  --f-display:"Unbounded","IBM Plex Sans",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --c1:#2648c9; --c2:#0f7a63; --c3:#a8640a; --c4:#9b2c6e; --c5:#5a3fb8; --c6:#1f7a9e;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11151b; --surface:#191f27; --surface-2:#1f2630; --ink:#e5e9ee; --muted:#98a3b0; --line:#2d3540;
+  --accent:#8da3ff; --accent-ink:#0f1630; --accent-soft:#232c4d; --stitch:#e3a54a; --stitch-soft:#3a2c17;
+  --danger:#ff8a7a; --danger-soft:#3b1f1c; --paper:#ffffff; --shadow:0 1px 2px rgba(0,0,0,.4);
+  --c1:#8da3ff; --c2:#4fc7a6; --c3:#e3a54a; --c4:#e57cb8; --c5:#a993f5; --c6:#5ec3e8; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11151b; --surface:#191f27; --surface-2:#1f2630; --ink:#e5e9ee; --muted:#98a3b0; --line:#2d3540;
+  --accent:#8da3ff; --accent-ink:#0f1630; --accent-soft:#232c4d; --stitch:#e3a54a; --stitch-soft:#3a2c17;
+  --danger:#ff8a7a; --danger-soft:#3b1f1c; --paper:#ffffff; --shadow:0 1px 2px rgba(0,0,0,.4);
+  --c1:#8da3ff; --c2:#4fc7a6; --c3:#e3a54a; --c4:#e57cb8; --c5:#a993f5; --c6:#5ec3e8; color-scheme:dark}
 
-  <style>
-    :root {
-      --primary: #2563eb;
-      --primary-hover: #1d4ed8;
-      --bg: #f8fafc;
-      --card-bg: #ffffff;
-      --text: #1e293b;
-      --text-muted: #64748b;
-      --border: #e2e8f0;
-      --success: #16a34a;
-    }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 80px;max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
 
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background-color: var(--bg); color: var(--text); padding: 30px 15px; }
-    .container { max-width: 900px; margin: 0 auto; }
-    
-    header { text-align: center; margin-bottom: 25px; }
-    header h1 { font-size: 1.8rem; color: #0f172a; margin-bottom: 8px; }
-    header p { color: var(--text-muted); font-size: 0.95rem; }
+/* header */
+.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{display:flex;align-items:baseline;gap:10px;margin-right:auto;min-width:0}
+.logo h1{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:-.01em;margin:0}
+.logo h1 span{color:var(--accent)}
+.logo p{margin:0;color:var(--muted);font-size:13px}
+.counts{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 
-    /* Вкладки */
-    .tabs { display: flex; gap: 8px; border-bottom: 2px solid var(--border); margin-bottom: 20px; overflow-x: auto; }
-    .tab-btn {
-      padding: 10px 18px;
-      background: none;
-      border: none;
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      cursor: pointer;
-      border-bottom: 3px solid transparent;
-      margin-bottom: -2px;
-      transition: all 0.2s;
-      white-space: nowrap;
-    }
-    .tab-btn:hover { color: var(--primary); }
-    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:7px 12px;cursor:pointer;font-weight:500;white-space:nowrap;transition:background .12s,border-color .12s}
+.btn:hover:not(:disabled){border-color:var(--muted)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover:not(:disabled){filter:brightness(1.07)}
+.btn.danger{color:var(--danger)}
+.btn.danger:hover:not(:disabled){background:var(--danger-soft);border-color:var(--danger)}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.ghost:hover:not(:disabled){background:var(--surface-2);border-color:var(--line)}
+.btn.wide{width:100%}
+.btn svg{width:16px;height:16px;flex:none}
+.icon-btn{padding:7px 9px}
 
-    /* Панелі вмісту */
-    .tab-content { display: none; background: var(--card-bg); padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid var(--border); }
-    .tab-content.active { display: block; }
+/* main layout */
+.main{display:grid;grid-template-columns:330px minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:880px){.main{grid-template-columns:minmax(0,1fr)}}
+.side{display:flex;flex-direction:column;gap:14px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);max-height:calc(100vh - 24px);overflow:auto;padding-bottom:4px}
+@media (max-width:880px){.side{position:static;max-height:none;overflow:visible}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.panel h2{margin:0;font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:8px}
 
-    /* Поля вводу та кнопки */
-    .form-group { margin-bottom: 18px; }
-    label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
-    input[type="file"], input[type="number"], input[type="text"], select {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      font-size: 0.95rem;
-      outline: none;
-    }
-    input[type="file"] { background: #f1f5f9; cursor: pointer; }
-    .hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+/* sources */
+.sources{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.src{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.chip{width:22px;height:22px;border-radius:5px;background:var(--c);color:var(--surface);font:600 11px/22px var(--f-mono);text-align:center}
+.src .nm{min-width:0}
+.src .nm b{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src .nm small{color:var(--muted);font-family:var(--f-mono);font-size:11.5px}
+.src .acts{display:flex;gap:2px}
+.src .acts button{border:0;background:transparent;border-radius:5px;padding:4px 6px;cursor:pointer;color:var(--muted)}
+.src .acts button:hover{background:var(--surface);color:var(--ink)}
+.tag-sample{display:inline-block;margin-left:6px;padding:0 6px;border-radius:4px;background:var(--stitch-soft);color:var(--stitch);font-size:11px;font-weight:600;vertical-align:1px}
+.hint{margin:0;color:var(--muted);font-size:12.5px}
+.empty-src{color:var(--muted);font-size:13px;padding:6px 0}
 
-    button.btn-action {
-      background: var(--primary);
-      color: white;
-      border: none;
-      padding: 12px 20px;
-      font-size: 1rem;
-      font-weight: 600;
-      border-radius: 6px;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      transition: background 0.2s;
-    }
-    button.btn-action:hover { background: var(--primary-hover); }
-    button.btn-action:disabled { background: #94a3b8; cursor: not-allowed; }
+/* tabs */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:3px;gap:3px}
+.tabs button{border:0;background:transparent;border-radius:6px;padding:7px 4px;cursor:pointer;font-weight:500;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 
-    /* Статус/Логи */
-    .status-box {
-      margin-top: 15px;
-      padding: 12px;
-      border-radius: 6px;
-      font-size: 0.9rem;
-      display: none;
-    }
-    .status-box.info { display: block; background: #e0f2fe; color: #0369a1; }
-    .status-box.success { display: block; background: #dcfce7; color: #15803d; }
-    .status-box.error { display: block; background: #fee2e2; color: #b91c1c; }
+.field{display:flex;flex-direction:column;gap:5px}
+.field > label,.lbl{font-size:12.5px;font-weight:500;color:var(--muted)}
+.inp{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:7px 9px;min-width:0}
+textarea.inp{resize:vertical;min-height:56px;font-family:var(--f-mono);font-size:13px}
+.inp.mono{font-family:var(--f-mono)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row > .inp{flex:1}
+.choice{display:flex;flex-direction:column;gap:4px}
+.choice label{display:flex;gap:9px;align-items:flex-start;padding:7px 9px;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+.choice label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.choice input{margin:3px 0 0;accent-color:var(--accent)}
+.choice .sub{display:block;color:var(--muted);font-size:12px}
+.seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg label{flex:1;text-align:center;padding:6px 8px;cursor:pointer;font-size:13px;border-left:1px solid var(--line)}
+.seg label:first-child{border-left:0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--accent-soft);color:var(--accent);font-weight:600}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+.num-inp{width:76px;text-align:center;font-family:var(--f-mono);font-size:15px;font-weight:500}
 
-    .file-info {
-      background: #f8fafc;
-      border: 1px dashed var(--border);
-      padding: 10px;
-      border-radius: 6px;
-      margin-top: 8px;
-      font-size: 0.85rem;
-      display: none;
-    }
-  </style>
-</head>
-<body>
+.parts{list-style:none;margin:0;padding:8px 10px;border:1px dashed var(--stitch);border-radius:8px;background:var(--stitch-soft);font-family:var(--f-mono);font-size:12.5px;display:flex;flex-direction:column;gap:2px;max-height:210px;overflow:auto;font-variant-numeric:tabular-nums}
+.parts li{display:flex;justify-content:space-between;gap:10px;color:var(--ink)}
+.parts li span:last-child{color:var(--muted)}
+.err{color:var(--danger);font-size:12.5px;margin:0}
+.divider{height:1px;background:var(--line);margin:2px 0}
 
-<div class="container">
-  <header>
-    <h1>🛠️ PDF Інструменти</h1>
-    <p>Швидка обробка файлів безпосередньо у вашому браузері (100% приватно)</p>
+/* work area */
+.work{display:flex;flex-direction:column;gap:10px;min-width:0}
+.toolbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+.toolbar .sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
+.selinfo{margin-left:auto;font-family:var(--f-mono);font-size:12.5px;color:var(--muted);padding:0 6px;font-variant-numeric:tabular-nums}
+.toolbar .btn{padding:6px 10px}
+@media (max-width:560px){.toolbar .lbl-t{display:none}}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:18px 14px;padding:6px 2px 2px}
+.page{position:relative;display:flex;flex-direction:column;gap:6px;cursor:pointer;border-radius:8px;padding:6px;outline:none;user-select:none;-webkit-user-select:none}
+.page:hover .sheet{border-color:var(--muted)}
+.page:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+.sheet{position:relative;aspect-ratio:3/4;max-width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.sheet img{max-width:100%;max-height:100%;display:block;background:var(--paper);box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.sheet .blank{width:72%;aspect-ratio:210/297;background:var(--paper);box-shadow:0 1px 3px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;color:#8a93a0;font-size:12px}
+.sheet .blank.land{width:88%;aspect-ratio:297/210}
+.sheet .loading{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.page.sel .sheet{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);background:var(--accent-soft)}
+.check{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:none;align-items:center;justify-content:center;z-index:2}
+.check svg{width:13px;height:13px}
+.page.sel .check{display:flex}
+.meta{display:flex;justify-content:space-between;align-items:center;gap:6px;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
+.meta .n{font-weight:500}
+.meta .o{display:flex;align-items:center;gap:4px;color:var(--muted);min-width:0;overflow:hidden;white-space:nowrap}
+.meta .o i{width:8px;height:8px;border-radius:2px;background:var(--c);flex:none}
+.rot{position:absolute;left:6px;top:6px;font:500 10.5px var(--f-mono);background:rgba(24,32,43,.75);color:#fff;border-radius:4px;padding:1px 5px;z-index:2}
+.part-tag{position:absolute;left:-8px;top:-12px;z-index:3;background:var(--stitch);color:var(--surface);font:600 10.5px var(--f-mono);padding:2px 7px;border-radius:4px;white-space:nowrap}
+.page.part-start::before{content:"";position:absolute;left:-8px;top:0;bottom:24px;border-left:2px dashed var(--stitch)}
+.page.drop-before::after,.page.drop-after::after{content:"";position:absolute;top:4px;bottom:28px;width:3px;border-radius:2px;background:var(--accent)}
+.page.drop-before::after{left:-9px}
+.page.drop-after::after{right:-9px}
+.page.dragging{opacity:.4}
+
+.empty{border:2px dashed var(--line);border-radius:12px;padding:48px 20px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:12px;align-items:center}
+.empty b{font-family:var(--f-display);font-weight:500;color:var(--ink);font-size:16px}
+
+.banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:9px 12px;border-radius:9px;background:var(--stitch-soft);border:1px solid var(--stitch);color:var(--ink);font-size:13px}
+.banner p{margin:0;flex:1;min-width:200px}
+
+/* status + toast */
+.status{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));background:var(--surface);border-top:1px solid var(--line);display:flex;align-items:center;gap:12px;box-shadow:0 -2px 10px rgba(0,0,0,.08)}
+.status .bar{flex:1;max-width:340px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.status .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
+.status .msg{font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast{position:fixed;left:50%;bottom:calc(64px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:30;background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:13px;max-width:calc(100vw - 32px);box-shadow:var(--shadow)}
+
+.drop-overlay{position:fixed;inset:0;z-index:40;background:color-mix(in srgb,var(--accent) 16%,transparent);display:flex;align-items:center;justify-content:center;pointer-events:none}
+.drop-overlay div{background:var(--surface);border:2px dashed var(--accent);border-radius:14px;padding:28px 36px;font-family:var(--f-display);font-size:17px;color:var(--accent)}
+
+/* preview */
+.modal{position:fixed;inset:0;z-index:50;background:rgba(10,14,20,.78);display:flex;flex-direction:column;padding:calc(12px + env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));gap:10px}
+.modal .mbar{display:flex;gap:8px;align-items:center;color:#fff}
+.modal .mbar span{margin-right:auto;font-family:var(--f-mono);font-size:13px}
+.modal .mbody{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:auto}
+.modal .mbody img{max-width:100%;max-height:100%;background:#fff;box-shadow:0 4px 30px rgba(0,0,0,.5)}
+.modal .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2);color:#fff}
+
+kbd{font-family:var(--f-mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--surface-2)}
+.keys{display:flex;flex-wrap:wrap;gap:6px 12px;color:var(--muted);font-size:12px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="logo">
+      <h1>Палітурня<span>·</span>PDF</h1>
+      <p>Поділ, об'єднання та впорядкування сторінок просто в браузері</p>
+    </div>
+    <span class="counts" id="counts"></span>
+    <button class="btn ghost icon-btn" id="undoBtn" title="Скасувати (Ctrl+Z)" aria-label="Скасувати"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="btn ghost icon-btn" id="redoBtn" title="Повторити (Ctrl+Shift+Z)" aria-label="Повторити"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+    <button class="btn primary" id="openBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Відкрити PDF</button>
   </header>
 
-  <!-- Навігаційні вкладки -->
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('split-n')">✂️ Поділити по N сторінок</button>
-    <button class="tab-btn" onclick="switchTab('merge')">📑 Об'єднати PDF</button>
-    <button class="tab-btn" onclick="switchTab('extract-delete')">🗑️ Видалити / Вибрати</button>
-    <button class="tab-btn" onclick="switchTab('append')">➕ Додати сторінки</button>
-  </div>
+  <div class="main">
+    <aside class="side">
+      <section class="panel" aria-labelledby="srcH">
+        <h2 id="srcH">Файли в роботі</h2>
+        <ul class="sources" id="sources"></ul>
+        <button class="btn wide" id="addBtn">Додати файли в кінець (об'єднати)</button>
+        <p class="hint">Сторінки всіх файлів складаються в один документ у порядку на сітці. Стрілки ↑↓ переставляють файли цілими блоками.</p>
+      </section>
 
-  <!-- ВКЛАДКА 1: Поділ по N сторінок (10 сторінок за операцію) -->
-  <div id="tab-split-n" class="tab-content active">
-    <h3>Швидкий поділ на рівні частини (по 10 сторінок)</h3>
-    <p class="hint" style="margin-bottom: 15px;">Файл автоматично розділиться на фрагменти та збережеться у вигляді ZIP-архіву.</p>
-    
-    <div class="form-group">
-      <label>Оберіть PDF файл:</label>
-      <input type="file" id="split-file" accept="application/pdf">
-      <div id="split-info" class="file-info"></div>
-    </div>
+      <div class="tabs" role="tablist" aria-label="Операції">
+        <button role="tab" id="tab-split" aria-selected="true" aria-controls="p-split">Поділ</button>
+        <button role="tab" id="tab-export" aria-selected="false" aria-controls="p-export">Експорт</button>
+        <button role="tab" id="tab-insert" aria-selected="false" aria-controls="p-insert">Вставка</button>
+      </div>
 
-    <div class="form-group">
-      <label>Кількість сторінок у кожній частині:</label>
-      <input type="number" id="split-chunk-size" value="10" min="1">
-      <div class="hint">За замовчуванням: 10 сторінок на один файл (1-10, 11-20 і т.д.).</div>
-    </div>
+      <section class="panel" id="p-split" role="tabpanel" aria-labelledby="tab-split">
+        <h2>Поділити документ</h2>
+        <div class="choice" id="splitMode">
+          <label><input type="radio" name="sm" value="every" id="sm-every" checked><span>Частинами по N сторінок<span class="sub">Остання частина може бути коротшою</span></span></label>
+          <label><input type="radio" name="sm" value="ranges" id="sm-ranges"><span>За діапазонами<span class="sub">Кожен діапазон стає окремим файлом</span></span></label>
+          <label><input type="radio" name="sm" value="single" id="sm-single"><span>Кожна сторінка окремо</span></label>
+        </div>
+        <div class="field" id="fEvery">
+          <label for="splitN">Сторінок у частині</label>
+          <div class="row"><input class="inp num-inp" type="number" id="splitN" min="1" value="10" inputmode="numeric">
+            <button class="btn ghost" data-n="5">5</button><button class="btn ghost" data-n="10">10</button><button class="btn ghost" data-n="20">20</button><button class="btn ghost" data-n="50">50</button></div>
+        </div>
+        <div class="field" id="fRanges" hidden>
+          <label for="splitRanges">Діапазони через кому</label>
+          <textarea class="inp" id="splitRanges" placeholder="1-10, 11-25, 26-">1-3, 4-12, 13-</textarea>
+          <p class="hint">«13-» означає з 13-ї до кінця; «7» — одна сторінка.</p>
+        </div>
+        <div class="field">
+          <span class="lbl">Як зберегти частини</span>
+          <div class="seg" id="splitOut">
+            <label><input type="radio" name="so" value="zip" id="so-zip" checked>Один ZIP-архів</label>
+            <label><input type="radio" name="so" value="files" id="so-files">Окремі PDF</label>
+          </div>
+        </div>
+        <ul class="parts" id="partsList" aria-label="Попередній перегляд частин"></ul>
+        <p class="err" id="splitErr" hidden></p>
+        <button class="btn primary wide" id="splitBtn">Поділити</button>
+      </section>
 
-    <button class="btn-action" id="btn-split-n" onclick="splitByNPages()">
-      Розділити та завантажити ZIP
-    </button>
-    <div id="status-split-n" class="status-box"></div>
-  </div>
+      <section class="panel" id="p-export" role="tabpanel" aria-labelledby="tab-export" hidden>
+        <h2>Експорт</h2>
+        <div class="field">
+          <label for="outName">Назва файлу</label>
+          <input class="inp" id="outName" value="документ">
+        </div>
+        <button class="btn primary wide" id="saveAllBtn">Зберегти весь документ</button>
+        <button class="btn wide" id="saveSelBtn">Зберегти виділені сторінки</button>
+        <div class="divider"></div>
+        <div class="field">
+          <label for="extractRange">Витягти діапазон</label>
+          <div class="row"><input class="inp mono" id="extractRange" placeholder="1-5, 8, 12-"><button class="btn" id="extractBtn">Витягти</button></div>
+        </div>
+        <div class="divider"></div>
+        <div class="field">
+          <span class="lbl">Сторінки як зображення PNG (ZIP)</span>
+          <div class="row">
+            <select class="inp" id="dpi" aria-label="Роздільна здатність"><option value="96">96 dpi — екран</option><option value="150" selected>150 dpi — стандарт</option><option value="200">200 dpi</option><option value="300">300 dpi — друк</option></select>
+            <button class="btn" id="pngBtn">Експорт</button>
+          </div>
+          <p class="hint">Якщо є виділені сторінки, експортуються лише вони.</p>
+        </div>
+      </section>
 
-  <!-- ВКЛАДКА 2: Об'єднання файлів -->
-  <div id="tab-merge" class="tab-content">
-    <h3>Об'єднання декількох PDF у один</h3>
-    <p class="hint" style="margin-bottom: 15px;">Оберіть кілька файлів одночасно (файли будуть зшиті у вибраному порядку).</p>
+      <section class="panel" id="p-insert" role="tabpanel" aria-labelledby="tab-insert" hidden>
+        <h2>Додати сторінки</h2>
+        <div class="field">
+          <span class="lbl">Куди вставляти</span>
+          <div class="choice" id="insWhere">
+            <label><input type="radio" name="iw" value="after" id="iw-after" checked><span>Після останньої виділеної<span class="sub">Без виділення — у кінець</span></span></label>
+            <label><input type="radio" name="iw" value="before" id="iw-before"><span>Перед першою виділеною</span></label>
+            <label><input type="radio" name="iw" value="start" id="iw-start"><span>На початок документа</span></label>
+            <label><input type="radio" name="iw" value="end" id="iw-end"><span>У кінець документа</span></label>
+          </div>
+        </div>
+        <button class="btn primary wide" id="insFileBtn">Вставити сторінки з іншого PDF…</button>
+        <div class="divider"></div>
+        <div class="field">
+          <span class="lbl">Порожні сторінки A4</span>
+          <div class="row">
+            <input class="inp num-inp" type="number" id="blankCount" min="1" max="200" value="1" aria-label="Кількість">
+            <select class="inp" id="blankOr" aria-label="Орієнтація"><option value="p">Книжкова</option><option value="l">Альбомна</option></select>
+          </div>
+          <button class="btn wide" id="blankBtn">Вставити порожні</button>
+        </div>
+        <div class="divider"></div>
+        <button class="btn wide" id="dupBtn">Дублювати виділені сторінки</button>
+      </section>
 
-    <div class="form-group">
-      <label>Оберіть PDF файли (можна вибрати декілька):</label>
-      <input type="file" id="merge-files" accept="application/pdf" multiple>
-      <div id="merge-info" class="file-info"></div>
-    </div>
+      <div class="keys" aria-label="Клавіші">
+        <span><kbd>Клік</kbd> виділити</span><span><kbd>Shift</kbd>+клік діапазон</span><span><kbd>Подвійний клік</kbd> перегляд</span><span><kbd>Del</kbd> видалити</span><span><kbd>Ctrl</kbd>+<kbd>A</kbd> усі</span><span>Перетягуйте мініатюри</span>
+      </div>
+    </aside>
 
-    <button class="btn-action" id="btn-merge" onclick="mergePdfs()">
-      Об'єднати та зберегти
-    </button>
-    <div id="status-merge" class="status-box"></div>
-  </div>
-
-  <!-- ВКЛАДКА 3: Видалення або вибірковий експорт сторінок -->
-  <div id="tab-extract-delete" class="tab-content">
-    <h3>Видалити або витягти окремі сторінки</h3>
-    
-    <div class="form-group">
-      <label>Оберіть PDF файл:</label>
-      <input type="file" id="filter-file" accept="application/pdf">
-      <div id="filter-info" class="file-info"></div>
-    </div>
-
-    <div class="form-group">
-      <label>Дія зі сторінками:</label>
-      <select id="filter-mode">
-        <option value="keep">Залишити тільки вказані сторінки (витягти)</option>
-        <option value="delete">Видалити вказані сторінки</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label>Номери сторінок або діапазони:</label>
-      <input type="text" id="filter-pages" placeholder="Наприклад: 1, 3-5, 8">
-      <div class="hint">Вказуйте номери через кому або через дефіс. Нумерація починається з 1.</div>
-    </div>
-
-    <button class="btn-action" id="btn-filter" onclick="filterPages()">
-      Обробити та зберегти
-    </button>
-    <div id="status-filter" class="status-box"></div>
-  </div>
-
-  <!-- ВКЛАДКА 4: Додавання / вставка сторінок -->
-  <div id="tab-append" class="tab-content">
-    <h3>Додати сторінки з іншого файлу</h3>
-    
-    <div class="form-group">
-      <label>Основний PDF документ:</label>
-      <input type="file" id="base-file" accept="application/pdf">
-    </div>
-
-    <div class="form-group">
-      <label>Додатковий PDF (сторінки якого треба додати):</label>
-      <input type="file" id="addon-file" accept="application/pdf">
-    </div>
-
-    <div class="form-group">
-      <label>Куди вставити:</label>
-      <select id="append-position">
-        <option value="end">У кінець основного документа</option>
-        <option value="start">На початок основного документа</option>
-      </select>
-    </div>
-
-    <button class="btn-action" id="btn-append" onclick="appendPdf()">
-      Зшити разом та завантажити
-    </button>
-    <div id="status-append" class="status-box"></div>
+    <section class="work" aria-label="Сторінки документа">
+      <div class="toolbar" role="toolbar" aria-label="Дії зі сторінками">
+        <button class="btn ghost" id="selAllBtn">Усі</button>
+        <button class="btn ghost" id="selNoneBtn">Зняти</button>
+        <button class="btn ghost" id="selEvenBtn" title="Виділити парні">Парні</button>
+        <button class="btn ghost" id="selOddBtn" title="Виділити непарні">Непарні</button>
+        <span class="sep"></span>
+        <button class="btn ghost" id="rotLBtn" title="Повернути ліворуч"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span class="lbl-t">90°</span></button>
+        <button class="btn ghost" id="rotRBtn" title="Повернути праворуч"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg><span class="lbl-t">90°</span></button>
+        <button class="btn ghost" id="moveLBtn" title="Перемістити раніше"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg><span class="lbl-t">Раніше</span></button>
+        <button class="btn ghost" id="moveRBtn" title="Перемістити пізніше"><span class="lbl-t">Пізніше</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+        <span class="sep"></span>
+        <button class="btn danger" id="delBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg><span class="lbl-t">Видалити</span></button>
+        <span class="selinfo" id="selInfo" aria-live="polite"></span>
+      </div>
+      <div class="banner" id="sampleBanner" hidden>
+        <p>Це приклад на 24 сторінки, щоб одразу спробувати поділ по 10. Відкрийте свій PDF — приклад зникне сам.</p>
+        <button class="btn" id="bannerOpen">Відкрити свій PDF</button>
+      </div>
+      <div class="grid" id="grid"></div>
+    </section>
   </div>
 </div>
 
+<div class="status" id="status" hidden><span class="msg" id="statusMsg"></span><span class="bar"><i id="statusBar"></i></span></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="drop-overlay" id="dropOv" hidden><div>Відпустіть, щоб додати PDF</div></div>
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-label="Перегляд сторінки">
+  <div class="mbar"><span id="mTitle"></span>
+    <button class="btn" id="mPrev" aria-label="Попередня">←</button><button class="btn" id="mNext" aria-label="Наступна">→</button><button class="btn" id="mSel">Виділити</button><button class="btn" id="mClose">Закрити</button></div>
+  <div class="mbody" id="mBody"></div>
+</div>
+<input type="file" id="fileIn" accept="application/pdf,.pdf" multiple hidden>
+<input type="file" id="insIn" accept="application/pdf,.pdf" multiple hidden>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
-  // Перемикання вкладок
-  function switchTab(tabId) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    
-    event.currentTarget.classList.add('active');
-    document.getElementById(`tab-${tabId}`).classList.add('active');
+(() => {
+"use strict";
+const { PDFDocument, degrees, StandardFonts, rgb } = PDFLib;
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const $ = id => document.getElementById(id);
+const COLORS = ["--c1","--c2","--c3","--c4","--c5","--c6"];
+const A4 = [595.28, 841.89];
+let uidN = 0, srcN = 0;
+const uid = () => "k" + (++uidN);
+
+const S = { sources: new Map(), pages: [], sel: new Set(), anchor: null, hist: [], future: [], nameEdited: false, tab: "split" };
+
+/* ---------- helpers ---------- */
+function plural(n, f){ const a=n%10, b=n%100; return f[(a===1&&b!==11)?0:(a>=2&&a<=4&&(b<10||b>=20))?1:2]; }
+const pagesWord = n => n + " " + plural(n, ["сторінка","сторінки","сторінок"]);
+const pad = (n, w) => String(n).padStart(w, "0");
+const stripExt = s => s.replace(/\.pdf$/i, "");
+const safeName = s => (s || "документ").replace(/[\\/:*?"<>|]+/g, "_").trim() || "документ";
+
+let toastT;
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true, 3200); }
+function busy(msg, frac){ $("status").hidden=false; $("statusMsg").textContent=msg; $("statusBar").style.width = (frac==null?0:Math.round(frac*100))+"%"; }
+function idle(){ $("status").hidden=true; }
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+function parseRanges(str, n){
+  const out=[]; const parts=str.split(/[,;\s]+/).map(s=>s.trim()).filter(Boolean);
+  if(!parts.length) throw new Error("Вкажіть хоча б один діапазон");
+  for(const p of parts){
+    const m = p.match(/^(\d*)\s*[-–—]\s*(\d*)$/);
+    let a,b;
+    if(m){ a = m[1]?+m[1]:1; b = m[2]?+m[2]:n; }
+    else if(/^\d+$/.test(p)){ a=b=+p; }
+    else throw new Error("Не вдалося прочитати «"+p+"»");
+    if(a<1||b<1) throw new Error("Номери сторінок починаються з 1");
+    if(a>n) throw new Error("У документі лише "+pagesWord(n)+", а вказано "+a);
+    b=Math.min(b,n);
+    if(a>b) throw new Error("Діапазон «"+p+"» задано навпаки");
+    out.push([a,b]);
+  }
+  return out;
+}
+
+/* ---------- history ---------- */
+const snap = () => ({ pages: S.pages.map(p=>({...p})), sel: [...S.sel] });
+function pushHist(){ S.hist.push(snap()); if(S.hist.length>100) S.hist.shift(); S.future=[]; }
+function restore(s){ S.pages=s.pages; S.sel=new Set(s.sel); render(); }
+function undo(){ if(!S.hist.length) return; S.future.push(snap()); restore(S.hist.pop()); toast("Дію скасовано"); }
+function redo(){ if(!S.future.length) return; S.hist.push(snap()); restore(S.future.pop()); }
+
+/* ---------- sources ---------- */
+async function loadSource(name, bytes, sample=false){
+  let js;
+  try { js = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported:false }).promise; }
+  catch(e){
+    if(e && e.name==="PasswordException") throw new Error("«"+name+"» захищено паролем. Зніміть пароль і відкрийте знову.");
+    throw new Error("«"+name+"» не схожий на коректний PDF.");
+  }
+  const id = "s" + (++srcN);
+  const src = { id, name, bytes, js, lib:null, count: js.numPages, color: COLORS[(srcN-1)%COLORS.length], no: srcN, sample };
+  S.sources.set(id, src);
+  return src;
+}
+async function libOf(src){
+  if(!src.lib) src.lib = await PDFDocument.load(src.bytes, { ignoreEncryption:true, updateMetadata:false });
+  return src.lib;
+}
+function activeSources(){
+  const seen=new Map();
+  for(const p of S.pages) if(p.s){ seen.set(p.s, (seen.get(p.s)||0)+1); }
+  return [...seen].map(([id,c])=>({ src:S.sources.get(id), used:c }));
+}
+
+async function addFiles(files, at){
+  const list=[...files].filter(f=>f.type==="application/pdf"||/\.pdf$/i.test(f.name));
+  if(!list.length){ toast("Оберіть файли у форматі PDF"); return; }
+  const loaded=[];
+  try{
+    for(let i=0;i<list.length;i++){
+      busy("Відкриваю «"+list[i].name+"»…", i/list.length);
+      const bytes=new Uint8Array(await list[i].arrayBuffer());
+      loaded.push(await loadSource(list[i].name, bytes));
+    }
+  }catch(e){ idle(); toast(e.message); if(!loaded.length) return; }
+  idle();
+  pushHist();
+  const hasSample = S.pages.some(p=>p.s && S.sources.get(p.s).sample);
+  if(hasSample){
+    S.pages = S.pages.filter(p=>!(p.s && S.sources.get(p.s).sample));
+    S.sel.clear(); at = undefined;
+  }
+  const fresh=[];
+  for(const src of loaded) for(let i=0;i<src.count;i++) fresh.push({ k:uid(), s:src.id, i, r:0 });
+  const idx = at==null ? S.pages.length : Math.max(0, Math.min(at, S.pages.length));
+  S.pages.splice(idx, 0, ...fresh);
+  render();
+  toast("Додано "+pagesWord(fresh.length)+(loaded.length>1?" з "+loaded.length+" файлів":""));
+}
+
+function moveSource(id, dir){
+  // group: each page belongs to its source; blank pages join the group of the page before them
+  const groups=[]; let cur=null;
+  for(const p of S.pages){
+    const g = p.s || (cur ? cur.id : "_blank");
+    if(!cur || cur.id!==g){ cur = groups.find(x=>x.id===g) || null; if(!cur){ cur={id:g,pages:[]}; groups.push(cur);} }
+    cur.pages.push(p);
+  }
+  const i=groups.findIndex(g=>g.id===id), j=i+dir;
+  if(i<0||j<0||j>=groups.length) return;
+  pushHist();
+  [groups[i],groups[j]]=[groups[j],groups[i]];
+  S.pages = groups.flatMap(g=>g.pages);
+  render();
+}
+function removeSource(id){
+  const src=S.sources.get(id);
+  pushHist();
+  S.pages=S.pages.filter(p=>p.s!==id);
+  for(const k of [...S.sel]) if(!S.pages.some(p=>p.k===k)) S.sel.delete(k);
+  render(); toast("Прибрано «"+src.name+"». Ctrl+Z поверне");
+}
+
+/* ---------- thumbnails ---------- */
+const thumbCache=new Map();
+const thumbKey = p => p.s ? p.s+":"+p.i+":"+p.r : null;
+async function renderPageCanvas(p, opts){
+  const src=S.sources.get(p.s);
+  const page=await src.js.getPage(p.i+1);
+  const rot=((page.rotate||0)+p.r)%360;
+  const v1=page.getViewport({ scale:1, rotation:rot });
+  const scale = opts.width ? opts.width/v1.width : opts.scale;
+  const v=page.getViewport({ scale, rotation:rot });
+  const c=document.createElement("canvas");
+  c.width=Math.max(1,Math.floor(v.width)); c.height=Math.max(1,Math.floor(v.height));
+  const ctx=c.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,c.width,c.height);
+  await page.render({ canvasContext:ctx, viewport:v }).promise;
+  return c;
+}
+function blankCanvas(p, scale){
+  const portrait = p.blank.h >= p.blank.w;
+  let w=p.blank.w, h=p.blank.h; if(p.r%180) [w,h]=[h,w];
+  const c=document.createElement("canvas"); c.width=Math.round(w*scale); c.height=Math.round(h*scale);
+  const ctx=c.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,c.width,c.height); void portrait;
+  return c;
+}
+const queue=[]; let active=0;
+function enqueue(el){ queue.push(el); pump(); }
+function pump(){
+  while(active<3 && queue.length){
+    const el=queue.shift(); if(!el.isConnected) continue;
+    const p=S.pages.find(x=>x.k===el.dataset.k); if(!p||!p.s) continue;
+    const key=thumbKey(p);
+    if(thumbCache.has(key)){ setThumb(el, thumbCache.get(key)); continue; }
+    active++;
+    renderPageCanvas(p,{width:240}).then(c=>{ const url=c.toDataURL("image/jpeg",.82); thumbCache.set(key,url); document.querySelectorAll('.page[data-tk="'+key+'"]').forEach(e=>setThumb(e,url)); })
+      .catch(()=>{ const s=el.querySelector(".sheet"); if(s) s.innerHTML='<span class="blank">помилка</span>'; })
+      .finally(()=>{ active--; pump(); });
+  }
+}
+function setThumb(el,url){ const s=el.querySelector(".sheet"); if(!s) return; const old=s.querySelector("img, .loading"); const img=new Image(); img.alt="Сторінка "+el.dataset.pos; img.src=url; if(old) old.replaceWith(img); else s.appendChild(img); }
+const io=new IntersectionObserver(es=>{ for(const e of es) if(e.isIntersecting){ io.unobserve(e.target); enqueue(e.target); } },{ rootMargin:"600px" });
+
+/* ---------- split plan ---------- */
+function splitPlan(){
+  const n=S.pages.length; const mode=document.querySelector('input[name="sm"]:checked').value;
+  if(!n) return { parts:[] };
+  if(mode==="every"){
+    const N=Math.max(1, Math.floor(+$("splitN").value||0));
+    if(!(+$("splitN").value>=1)) return { error:"Вкажіть кількість сторінок у частині (від 1)", parts:[] };
+    const parts=[]; for(let a=1;a<=n;a+=N) parts.push([a,Math.min(n,a+N-1)]); return { parts };
+  }
+  if(mode==="single") return { parts: S.pages.map((_,i)=>[i+1,i+1]) };
+  try{ return { parts: parseRanges($("splitRanges").value, n) }; } catch(e){ return { error:e.message, parts:[] }; }
+}
+
+/* ---------- render ---------- */
+const CHECK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg>';
+function render(){
+  const n=S.pages.length, act=activeSources();
+  $("counts").textContent = n ? pagesWord(n)+" · "+act.length+" "+plural(act.length,["файл","файли","файлів"]) : "";
+  $("undoBtn").disabled=!S.hist.length; $("redoBtn").disabled=!S.future.length;
+  $("sampleBanner").hidden = !(act.length===1 && act[0].src.sample);
+
+  // sources
+  const ul=$("sources"); ul.textContent="";
+  if(!act.length){ const li=document.createElement("li"); li.className="empty-src"; li.textContent="Поки що жодного файлу"; ul.appendChild(li); }
+  act.forEach(({src,used},idx)=>{
+    const li=document.createElement("li"); li.className="src";
+    const chip=document.createElement("span"); chip.className="chip"; chip.style.setProperty("--c","var("+src.color+")"); chip.textContent=src.no;
+    const nm=document.createElement("div"); nm.className="nm";
+    const b=document.createElement("b"); b.textContent=src.name; b.title=src.name;
+    if(src.sample){ const t=document.createElement("span"); t.className="tag-sample"; t.textContent="приклад"; b.appendChild(t); }
+    const sm=document.createElement("small"); sm.textContent = used===src.count ? pagesWord(src.count) : used+" з "+src.count+" с.";
+    nm.append(b,sm);
+    const acts=document.createElement("div"); acts.className="acts";
+    const mk=(t,l,fn,dis)=>{ const x=document.createElement("button"); x.textContent=t; x.title=l; x.setAttribute("aria-label",l); x.disabled=!!dis; x.onclick=fn; return x; };
+    acts.append(mk("↑","Перемістити файл вище",()=>moveSource(src.id,-1),idx===0), mk("↓","Перемістити файл нижче",()=>moveSource(src.id,1),idx===act.length-1), mk("✕","Прибрати файл",()=>removeSource(src.id)));
+    li.append(chip,nm,acts); ul.appendChild(li);
+  });
+  if(!S.nameEdited){
+    const own=act.find(a=>!a.src.sample);
+    $("outName").value = act.length>1 ? "обʼєднаний" : own ? stripExt(own.src.name) : act.length ? "приклад" : "документ";
   }
 
-  // Інформація про вибраний файл
-  function setupFileInfo(inputId, infoId) {
-    document.getElementById(inputId).addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      const infoBox = document.getElementById(infoId);
-      if (!file) {
-        infoBox.style.display = 'none';
-        return;
-      }
-      infoBox.style.display = 'block';
-      infoBox.textContent = `Завантаження інфо: ${file.name}...`;
+  // split preview
+  const plan=splitPlan(); const pl=$("partsList"); pl.textContent="";
+  $("splitErr").hidden=!plan.error; $("splitErr").textContent=plan.error||"";
+  const w=Math.max(2,String(plan.parts.length).length);
+  plan.parts.slice(0,40).forEach(([a,b],i)=>{ const li=document.createElement("li"); const l=document.createElement("span"); l.textContent="Частина "+pad(i+1,w); const r=document.createElement("span"); r.textContent=(a===b?"с. "+a:"с. "+a+"–"+b)+" · "+(b-a+1); li.append(l,r); pl.appendChild(li); });
+  if(plan.parts.length>40){ const li=document.createElement("li"); li.textContent="…і ще "+(plan.parts.length-40); pl.appendChild(li); }
+  pl.hidden=!plan.parts.length;
+  $("splitBtn").disabled=!plan.parts.length;
+  $("splitBtn").textContent = plan.parts.length ? "Поділити на "+plan.parts.length+" "+plural(plan.parts.length,["частину","частини","частин"]) : "Поділити";
 
-      try {
-        const bytes = await file.arrayBuffer();
-        const doc = await PDFLib.PDFDocument.load(bytes);
-        infoBox.textContent = `Файл: ${file.name} | Всього сторінок: ${doc.getPageCount()} | Розмір: ${(file.size / 1024 / 1024).toFixed(2)} МБ`;
-      } catch (err) {
-        infoBox.textContent = `Помилка читання PDF: ${err.message}`;
-      }
-    });
+  // grid
+  const starts=new Map();
+  if(S.tab==="split" && plan.parts.length>1 && plan.parts.length<=400) plan.parts.forEach(([a,b],i)=>{ if(!starts.has(a)) starts.set(a,{i:i+1,a,b}); });
+  const grid=$("grid"); grid.textContent=""; queue.length=0;
+  if(!n){
+    const e=document.createElement("div"); e.className="empty"; e.style.gridColumn="1/-1";
+    e.innerHTML='<b>Документ порожній</b><span>Перетягніть сюди PDF або відкрийте файли з диска.</span>';
+    const btn=document.createElement("button"); btn.className="btn primary"; btn.textContent="Відкрити PDF"; btn.onclick=()=>$("fileIn").click(); e.appendChild(btn);
+    grid.appendChild(e);
   }
+  const frag=document.createDocumentFragment();
+  S.pages.forEach((p,idx)=>{
+    const pos=idx+1; const el=document.createElement("div");
+    el.className="page"+(S.sel.has(p.k)?" sel":""); el.dataset.k=p.k; el.dataset.pos=pos; el.draggable=true; el.tabIndex=0;
+    el.setAttribute("role","button"); el.setAttribute("aria-pressed",S.sel.has(p.k)?"true":"false");
+    const src=p.s?S.sources.get(p.s):null;
+    el.setAttribute("aria-label","Сторінка "+pos+(src?", файл "+src.no+", сторінка "+(p.i+1):", порожня"));
+    const sheet=document.createElement("div"); sheet.className="sheet";
+    if(p.s){
+      const key=thumbKey(p); el.dataset.tk=key;
+      if(thumbCache.has(key)){ const img=new Image(); img.alt="Сторінка "+pos; img.src=thumbCache.get(key); sheet.appendChild(img); }
+      else { const l=document.createElement("span"); l.className="loading"; sheet.appendChild(l); io.observe(el); }
+    } else {
+      const bl=document.createElement("span"); const land=(p.blank.w>p.blank.h)!==(p.r%180!==0); bl.className="blank"+(land?" land":""); bl.textContent="порожня"; sheet.appendChild(bl);
+    }
+    const chk=document.createElement("span"); chk.className="check"; chk.innerHTML=CHECK;
+    const meta=document.createElement("div"); meta.className="meta";
+    const nn=document.createElement("span"); nn.className="n"; nn.textContent=pos;
+    const o=document.createElement("span"); o.className="o";
+    if(src){ const i=document.createElement("i"); i.style.setProperty("--c","var("+src.color+")"); o.append(i, document.createTextNode("Ф"+src.no+"·"+(p.i+1))); } else o.textContent="нова";
+    meta.append(nn,o);
+    el.append(sheet,chk,meta);
+    if(p.r){ const r=document.createElement("span"); r.className="rot"; r.textContent="↻"+p.r+"°"; el.appendChild(r); }
+    const st=starts.get(pos);
+    if(st){ el.classList.add("part-start"); const t=document.createElement("span"); t.className="part-tag"; t.textContent="Ч"+st.i+" · "+st.a+"–"+st.b; el.appendChild(t); }
+    frag.appendChild(el);
+  });
+  grid.appendChild(frag);
+  updateSelInfo();
+}
+function updateSelInfo(){
+  const k=S.sel.size, n=S.pages.length;
+  $("selInfo").textContent = k ? "виділено "+k+" з "+n : n ? "клікніть сторінку, щоб виділити" : "";
+  ["rotLBtn","rotRBtn","moveLBtn","moveRBtn","delBtn","selNoneBtn","dupBtn"].forEach(id=>$(id).disabled=!k);
+  $("saveSelBtn").disabled=!k; $("saveSelBtn").textContent = k ? "Зберегти виділені ("+k+")" : "Зберегти виділені сторінки";
+  $("saveAllBtn").disabled=!n; $("pngBtn").disabled=!n; $("extractBtn").disabled=!n;
+  $("saveAllBtn").textContent = n ? "Зберегти весь документ ("+pagesWord(n)+")" : "Зберегти весь документ";
+}
+function paintSel(){
+  document.querySelectorAll("#grid .page").forEach(el=>{ const on=S.sel.has(el.dataset.k); el.classList.toggle("sel",on); el.setAttribute("aria-pressed",on?"true":"false"); });
+  updateSelInfo();
+}
 
-  setupFileInfo('split-file', 'split-info');
-  setupFileInfo('filter-file', 'filter-info');
+/* ---------- selection & grid events ---------- */
+const grid=$("grid");
+grid.addEventListener("click", e=>{
+  const el=e.target.closest(".page"); if(!el) return;
+  const k=el.dataset.k;
+  if(e.shiftKey && S.anchor){
+    const a=S.pages.findIndex(p=>p.k===S.anchor), b=S.pages.findIndex(p=>p.k===k);
+    if(a>=0&&b>=0){ const [lo,hi]=a<b?[a,b]:[b,a]; for(let i=lo;i<=hi;i++) S.sel.add(S.pages[i].k); }
+  } else { if(S.sel.has(k)) S.sel.delete(k); else S.sel.add(k); S.anchor=k; }
+  paintSel();
+});
+grid.addEventListener("dblclick", e=>{ const el=e.target.closest(".page"); if(el) openPreview(+el.dataset.pos-1); });
+grid.addEventListener("keydown", e=>{
+  const el=e.target.closest(".page"); if(!el) return;
+  if(e.key===" "){ e.preventDefault(); el.click(); }
+  if(e.key==="Enter"){ e.preventDefault(); openPreview(+el.dataset.pos-1); }
+  if(e.key==="ArrowRight"||e.key==="ArrowLeft"){ const n=e.key==="ArrowRight"?el.nextElementSibling:el.previousElementSibling; if(n) n.focus(); }
+});
 
-  // Індикатор стану
-  function setStatus(elementId, text, type = 'info') {
-    const el = document.getElementById(elementId);
-    el.className = `status-box ${type}`;
-    el.textContent = text;
+/* drag to reorder */
+let dragKeys=null;
+grid.addEventListener("dragstart", e=>{
+  const el=e.target.closest(".page"); if(!el) return;
+  const k=el.dataset.k;
+  dragKeys = S.sel.has(k) ? new Set(S.pages.filter(p=>S.sel.has(p.k)).map(p=>p.k)) : new Set([k]);
+  e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain",k);
+  requestAnimationFrame(()=>document.querySelectorAll("#grid .page").forEach(x=>{ if(dragKeys&&dragKeys.has(x.dataset.k)) x.classList.add("dragging"); }));
+});
+grid.addEventListener("dragend", ()=>{ dragKeys=null; document.querySelectorAll(".dragging,.drop-before,.drop-after").forEach(x=>x.classList.remove("dragging","drop-before","drop-after")); });
+let dropTarget=null;
+grid.addEventListener("dragover", e=>{
+  if(!dragKeys) return;
+  const el=e.target.closest(".page"); if(!el) return;
+  e.preventDefault(); e.dataTransfer.dropEffect="move";
+  const r=el.getBoundingClientRect(); const after=e.clientX>r.left+r.width/2;
+  if(dropTarget && (dropTarget.el!==el || dropTarget.after!==after)) dropTarget.el.classList.remove("drop-before","drop-after");
+  el.classList.add(after?"drop-after":"drop-before"); dropTarget={el,after};
+});
+grid.addEventListener("drop", e=>{
+  if(!dragKeys || !dropTarget) return;
+  e.preventDefault(); e.stopPropagation();
+  const tk=dropTarget.el.dataset.k, after=dropTarget.after;
+  if(!dragKeys.has(tk)){
+    pushHist();
+    const moving=S.pages.filter(p=>dragKeys.has(p.k)), rest=S.pages.filter(p=>!dragKeys.has(p.k));
+    let i=rest.findIndex(p=>p.k===tk); if(after) i++;
+    rest.splice(i,0,...moving); S.pages=rest; render();
   }
+  dragKeys=null; dropTarget=null;
+});
 
-  // 1. Поділ на N сторінок (наприклад, по 10 сторінок за раз)
-  async function splitByNPages() {
-    const fileInput = document.getElementById('split-file');
-    const chunkSizeInput = document.getElementById('split-chunk-size');
-    const chunkSize = parseInt(chunkSizeInput.value, 10);
+/* file drop anywhere */
+let dragDepth=0;
+const isFileDrag = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+window.addEventListener("dragenter", e=>{ if(isFileDrag(e)){ dragDepth++; $("dropOv").hidden=false; } });
+window.addEventListener("dragleave", e=>{ if(isFileDrag(e) && --dragDepth<=0){ dragDepth=0; $("dropOv").hidden=true; } });
+window.addEventListener("dragover", e=>{ if(isFileDrag(e)) e.preventDefault(); });
+window.addEventListener("drop", e=>{ if(!isFileDrag(e)) return; e.preventDefault(); dragDepth=0; $("dropOv").hidden=true; addFiles(e.dataTransfer.files); });
 
-    if (!fileInput.files.length) {
-      return setStatus('status-split-n', 'Будь ласка, оберіть файл PDF.', 'error');
-    }
-    if (!chunkSize || chunkSize < 1) {
-      return setStatus('status-split-n', 'Введіть коректну кількість сторінок (1 або більше).', 'error');
-    }
+/* ---------- page operations ---------- */
+const selected = () => S.pages.filter(p=>S.sel.has(p.k));
+function needSel(){ if(!S.sel.size){ toast("Спершу виділіть сторінки"); return false; } return true; }
+function rotate(d){ if(!needSel()) return; pushHist(); S.pages=S.pages.map(p=>S.sel.has(p.k)?{...p,r:(p.r+d+360)%360}:p); render(); }
+function delSel(){
+  if(!needSel()) return; const k=S.sel.size; pushHist();
+  S.pages=S.pages.filter(p=>!S.sel.has(p.k)); S.sel.clear(); render();
+  toast("Видалено "+pagesWord(k)+". Ctrl+Z поверне");
+}
+function shift(dir){
+  if(!needSel()) return; pushHist(); const a=S.pages.slice();
+  if(dir<0){ for(let i=1;i<a.length;i++) if(S.sel.has(a[i].k)&&!S.sel.has(a[i-1].k)) [a[i-1],a[i]]=[a[i],a[i-1]]; }
+  else { for(let i=a.length-2;i>=0;i--) if(S.sel.has(a[i].k)&&!S.sel.has(a[i+1].k)) [a[i],a[i+1]]=[a[i+1],a[i]]; }
+  S.pages=a; render();
+  const first=document.querySelector("#grid .page.sel"); if(first) first.scrollIntoView({block:"nearest"});
+}
+function insertIndex(){
+  const w=document.querySelector('input[name="iw"]:checked').value;
+  const idxs=S.pages.map((p,i)=>S.sel.has(p.k)?i:-1).filter(i=>i>=0);
+  if(w==="start") return 0;
+  if(w==="end"||!idxs.length) return S.pages.length;
+  return w==="before" ? idxs[0] : idxs[idxs.length-1]+1;
+}
+function insertBlank(){
+  const c=Math.max(1,Math.min(200,Math.floor(+$("blankCount").value||1)));
+  const land=$("blankOr").value==="l";
+  const at=insertIndex(); pushHist();
+  const fresh=Array.from({length:c},()=>({k:uid(),s:null,i:0,r:0,blank:{w:land?A4[1]:A4[0],h:land?A4[0]:A4[1]}}));
+  S.pages.splice(at,0,...fresh); render(); toast("Вставлено "+c+" "+plural(c,["порожню сторінку","порожні сторінки","порожніх сторінок"])+" на позицію "+(at+1));
+}
+function duplicate(){
+  if(!needSel()) return; pushHist(); const out=[];
+  for(const p of S.pages){ out.push(p); if(S.sel.has(p.k)) out.push({...p,k:uid(),blank:p.blank?{...p.blank}:undefined}); }
+  S.pages=out; render();
+}
 
-    const btn = document.getElementById('btn-split-n');
-    btn.disabled = true;
-    setStatus('status-split-n', 'Обробка та розбиття документа...', 'info');
-
-    try {
-      const file = fileInput.files[0];
-      const baseName = file.name.replace(/\.[^/.]+$/, "");
-      const arrayBuffer = await file.arrayBuffer();
-      const srcDoc = await PDFLib.PDFDocument.load(arrayBuffer);
-      const totalPages = srcDoc.getPageCount();
-
-      const zip = new JSZip();
-      let partNumber = 1;
-
-      for (let i = 0; i < totalPages; i += chunkSize) {
-        const newDoc = await PDFLib.PDFDocument.create();
-        const end = Math.min(i + chunkSize, totalPages);
-        
-        // Масив індексів сторінок (0-based)
-        const pageIndices = [];
-        for (let j = i; j < end; j++) {
-          pageIndices.push(j);
-        }
-
-        const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
-        copiedPages.forEach(p => newDoc.addPage(p));
-
-        const pdfBytes = await newDoc.save();
-        const fileName = `${baseName}_частина_${partNumber}_стор_${i + 1}-${end}.pdf`;
-        zip.file(fileName, pdfBytes);
-
-        setStatus('status-split-n', `Створено частину ${partNumber} (сторінки ${i + 1}–${end})...`, 'info');
-        partNumber++;
-      }
-
-      setStatus('status-split-n', 'Створення ZIP-архіву...', 'info');
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      saveAs(zipBlob, `${baseName}_розділений_по_${chunkSize}_стор.zip`);
-
-      setStatus('status-split-n', `Готово! Успішно створено ${partNumber - 1} файл(ів) у ZIP.`, 'success');
-    } catch (err) {
-      console.error(err);
-      setStatus('status-split-n', `Помилка: ${err.message}`, 'error');
-    } finally {
-      btn.disabled = false;
-    }
+/* ---------- building PDFs ---------- */
+async function buildPdf(list){
+  const out=await PDFDocument.create();
+  const bySrc=new Map();
+  for(const p of list) if(p.s){ if(!bySrc.has(p.s)) bySrc.set(p.s,[]); bySrc.get(p.s).push(p.i); }
+  const queues=new Map();
+  for(const [id,idxs] of bySrc){ const lib=await libOf(S.sources.get(id)); queues.set(id, await out.copyPages(lib, idxs)); }
+  for(const p of list){
+    if(!p.s){ const pg=out.addPage([p.blank.w,p.blank.h]); if(p.r) pg.setRotation(degrees(p.r)); continue; }
+    const pg=queues.get(p.s).shift();
+    if(p.r) pg.setRotation(degrees(((pg.getRotation().angle||0)+p.r)%360));
+    out.addPage(pg);
   }
+  out.setProducer("Палітурня PDF"); out.setCreator("Палітурня PDF");
+  return out.save();
+}
 
-  // 2. Об'єднання файлів
-  async function mergePdfs() {
-    const fileInput = document.getElementById('merge-files');
-    if (fileInput.files.length < 2) {
-      return setStatus('status-merge', 'Будь ласка, виберіть щонайменше 2 файли для об’єднання.', 'error');
-    }
-
-    const btn = document.getElementById('btn-merge');
-    btn.disabled = true;
-    setStatus('status-merge', 'Об’єднання файлів...', 'info');
-
-    try {
-      const mergedPdf = await PDFLib.PDFDocument.create();
-
-      for (let i = 0; i < fileInput.files.length; i++) {
-        const file = fileInput.files[i];
-        setStatus('status-merge', `Додавання файлу (${i + 1}/${fileInput.files.length}): ${file.name}...`, 'info');
-        
-        const bytes = await file.arrayBuffer();
-        const doc = await PDFLib.PDFDocument.load(bytes);
-        const copiedPages = await mergedPdf.copyPages(doc, doc.getPageIndices());
-        copiedPages.forEach(p => mergedPdf.addPage(p));
-      }
-
-      const mergedPdfBytes = await mergedPdf.save();
-      const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
-      saveAs(blob, 'merged_document.pdf');
-
-      setStatus('status-merge', 'Файли успішно об’єднано та збережено!', 'success');
-    } catch (err) {
-      console.error(err);
-      setStatus('status-merge', `Помилка: ${err.message}`, 'error');
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  // Парсер діапазонів (наприклад: "1, 3-5, 8") -> Set(0-based індекси)
-  function parsePageRanges(str, maxPages) {
-    const indices = new Set();
-    const parts = str.split(',').map(s => s.trim()).filter(Boolean);
-
-    for (const part of parts) {
-      if (part.includes('-')) {
-        const [start, end] = part.split('-').map(n => parseInt(n.trim(), 10));
-        if (isNaN(start) || isNaN(end)) continue;
-        for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
-          if (i >= 1 && i <= maxPages) indices.add(i - 1);
-        }
-      } else {
-        const num = parseInt(part, 10);
-        if (!isNaN(num) && num >= 1 && num <= maxPages) {
-          indices.add(num - 1);
-        }
-      }
-    }
-    return indices;
-  }
-
-  // 3. Видалення або вибірковий експорт
-  async function filterPages() {
-    const fileInput = document.getElementById('filter-file');
-    const mode = document.getElementById('filter-mode').value;
-    const pagesStr = document.getElementById('filter-pages').value.trim();
-
-    if (!fileInput.files.length) {
-      return setStatus('status-filter', 'Будь ласка, оберіть файл PDF.', 'error');
-    }
-    if (!pagesStr) {
-      return setStatus('status-filter', 'Вкажіть номери або діапазони сторінок.', 'error');
-    }
-
-    const btn = document.getElementById('btn-filter');
-    btn.disabled = true;
-    setStatus('status-filter', 'Обробка сторінок...', 'info');
-
-    try {
-      const file = fileInput.files[0];
-      const bytes = await file.arrayBuffer();
-      const srcDoc = await PDFLib.PDFDocument.load(bytes);
-      const totalPages = srcDoc.getPageCount();
-
-      const targetIndices = parsePageRanges(pagesStr, totalPages);
-      if (targetIndices.size === 0) {
-        throw new Error('Не знайдено жодної коректної сторінки з вказаного діапазону.');
-      }
-
-      let finalIndices = [];
-      if (mode === 'keep') {
-        finalIndices = Array.from(targetIndices).sort((a, b) => a - b);
-      } else {
-        for (let i = 0; i < totalPages; i++) {
-          if (!targetIndices.has(i)) finalIndices.push(i);
-        }
-      }
-
-      if (finalIndices.length === 0) {
-        throw new Error('У результаті операції не залишилося жодної сторінки.');
-      }
-
-      const newDoc = await PDFLib.PDFDocument.create();
-      const copiedPages = await newDoc.copyPages(srcDoc, finalIndices);
-      copiedPages.forEach(p => newDoc.addPage(p));
-
-      const pdfBytes = await newDoc.save();
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      saveAs(blob, `edited_${file.name}`);
-
-      setStatus('status-filter', `Успішно! Сформовано новий документ на ${finalIndices.length} стор.`, 'success');
-    } catch (err) {
-      console.error(err);
-      setStatus('status-filter', `Помилка: ${err.message}`, 'error');
-    } finally {
-      btn.disabled = false;
+/* ---------- saving ---------- */
+let dl=null; const dlReady = (window.claude && typeof window.claude.use==="function") ? window.claude.use("downloads").then(x=>{dl=x;}).catch(()=>{}) : Promise.resolve();
+async function saveFile(name, data){
+  await dlReady;
+  if(dl){
+    try{ await dl.save({ filename:name, data }); return true; }
+    catch(e){
+      const c=e&&e.code;
+      if(c==="declined"){ toast("Збереження скасовано"); return false; }
+      if(c==="too_large"){ toast("Файл завеликий для збереження тут. Спробуйте поділити його на менші частини"); return false; }
+      if(c==="rate_limited"){ await new Promise(r=>setTimeout(r,1500)); return saveFile(name,data); }
+      // fall through to plain download
     }
   }
+  const blob = data instanceof Blob ? data : new Blob([data], { type: name.endsWith(".zip")?"application/zip":"application/pdf" });
+  const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 30000);
+  return true;
+}
+const base = () => safeName($("outName").value);
+let working=false;
+async function guard(fn){
+  if(working){ toast("Зачекайте, попередня операція ще триває"); return; }
+  working=true; try{ await fn(); } catch(e){ console.error(e); toast("Не вдалося: "+(e.message||e)); } finally{ working=false; idle(); }
+}
 
-  // 4. Додавання сторінок
-  async function appendPdf() {
-    const baseInput = document.getElementById('base-file');
-    const addonInput = document.getElementById('addon-file');
-    const position = document.getElementById('append-position').value;
-
-    if (!baseInput.files.length || !addonInput.files.length) {
-      return setStatus('status-append', 'Оберіть обидва файли (основний та додатковий).', 'error');
-    }
-
-    const btn = document.getElementById('btn-append');
-    btn.disabled = true;
-    setStatus('status-append', 'Зшивання сторінок...', 'info');
-
-    try {
-      const baseBytes = await baseInput.files[0].arrayBuffer();
-      const addonBytes = await addonInput.files[0].arrayBuffer();
-
-      const baseDoc = await PDFLib.PDFDocument.load(baseBytes);
-      const addonDoc = await PDFLib.PDFDocument.load(addonBytes);
-
-      const newDoc = await PDFLib.PDFDocument.create();
-
-      const basePages = await newDoc.copyPages(baseDoc, baseDoc.getPageIndices());
-      const addonPages = await newDoc.copyPages(addonDoc, addonDoc.getPageIndices());
-
-      if (position === 'start') {
-        addonPages.forEach(p => newDoc.addPage(p));
-        basePages.forEach(p => newDoc.addPage(p));
-      } else {
-        basePages.forEach(p => newDoc.addPage(p));
-        addonPages.forEach(p => newDoc.addPage(p));
+function saveAll(){ guard(async()=>{ busy("Збираю документ…",.3); const bytes=await buildPdf(S.pages); idle(); if(await saveFile(base()+".pdf",bytes)) toast("Збережено «"+base()+".pdf»"); }); }
+function saveSel(){ if(!needSel()) return; guard(async()=>{ const list=selected(); busy("Збираю "+pagesWord(list.length)+"…",.3); const bytes=await buildPdf(list); idle(); const nm=base()+"_виділені.pdf"; if(await saveFile(nm,bytes)) toast("Збережено «"+nm+"»"); }); }
+function extract(){
+  let r; try{ r=parseRanges($("extractRange").value, S.pages.length); } catch(e){ toast(e.message); return; }
+  guard(async()=>{ const list=r.flatMap(([a,b])=>S.pages.slice(a-1,b)); busy("Збираю "+pagesWord(list.length)+"…",.3); const bytes=await buildPdf(list);
+    const tag=$("extractRange").value.replace(/\s+/g,"").replace(/[^\d,\-–]/g,"").replace(/,/g,"_").slice(0,40); idle();
+    const nm=base()+"_с"+tag+".pdf"; if(await saveFile(nm,bytes)) toast("Збережено «"+nm+"»"); });
+}
+function split(){
+  const plan=splitPlan(); if(plan.error||!plan.parts.length){ toast(plan.error||"Немає що ділити"); return; }
+  const asZip=document.querySelector('input[name="so"]:checked').value==="zip";
+  guard(async()=>{
+    const parts=plan.parts, w=Math.max(2,String(parts.length).length), b=base();
+    const names=parts.map(([x,y],i)=>b+"_частина-"+pad(i+1,w)+"_с"+(x===y?x:x+"-"+y)+".pdf");
+    if(asZip){
+      const zip=new JSZip();
+      for(let i=0;i<parts.length;i++){
+        busy("Частина "+(i+1)+" з "+parts.length+"…", i/parts.length); await tick();
+        const [x,y]=parts[i]; zip.file(names[i], await buildPdf(S.pages.slice(x-1,y)));
       }
-
-      const pdfBytes = await newDoc.save();
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      saveAs(blob, `combined_${baseInput.files[0].name}`);
-
-      setStatus('status-append', 'Сторінки успішно додано та збережено!', 'success');
-    } catch (err) {
-      console.error(err);
-      setStatus('status-append', `Помилка: ${err.message}`, 'error');
-    } finally {
-      btn.disabled = false;
+      busy("Пакую архів…",1);
+      const blob=await zip.generateAsync({ type:"blob", compression:"STORE" });
+      idle();
+      if(await saveFile(b+"_по-частинах.zip",blob)) toast("Готово: "+parts.length+" "+plural(parts.length,["частина","частини","частин"])+" в архіві «"+b+"_по-частинах.zip»");
+    } else {
+      let saved=0;
+      for(let i=0;i<parts.length;i++){
+        busy("Частина "+(i+1)+" з "+parts.length+"…", i/parts.length);
+        const [x,y]=parts[i]; const bytes=await buildPdf(S.pages.slice(x-1,y));
+        const ok=await saveFile(names[i],bytes); if(!ok) break; saved++;
+      }
+      idle(); toast("Збережено "+saved+" з "+parts.length+" файлів");
     }
+  });
+}
+function exportPng(){
+  const list = S.sel.size ? selected() : S.pages.slice();
+  const dpi=+$("dpi").value, scale=dpi/72;
+  guard(async()=>{
+    const zip=new JSZip(); const all=S.pages; const w=Math.max(3,String(all.length).length);
+    for(let i=0;i<list.length;i++){
+      busy("Малюю сторінку "+(i+1)+" з "+list.length+"…", i/list.length);
+      const p=list[i]; const c = p.s ? await renderPageCanvas(p,{scale}) : blankCanvas(p,scale);
+      const blob=await new Promise(r=>c.toBlob(r,"image/png"));
+      zip.file(base()+"_с"+pad(all.indexOf(p)+1,w)+".png", blob);
+      c.width=c.height=0;
+    }
+    busy("Пакую архів…",1);
+    const blob=await zip.generateAsync({ type:"blob", compression:"STORE" }); idle();
+    const nm=base()+"_png_"+dpi+"dpi.zip"; if(await saveFile(nm,blob)) toast("Збережено «"+nm+"»");
+  });
+}
+
+/* ---------- preview ---------- */
+let pv=-1;
+async function openPreview(i){
+  if(i<0||i>=S.pages.length) return; pv=i; const p=S.pages[i];
+  $("modal").hidden=false; $("mTitle").textContent="Сторінка "+(i+1)+" з "+S.pages.length;
+  $("mSel").textContent = S.sel.has(p.k) ? "Зняти виділення" : "Виділити";
+  const body=$("mBody"); body.innerHTML='<span class="loading" style="width:28px;height:28px;border-radius:50%;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite"></span>';
+  const wpx=Math.min(1400, Math.round(Math.min(window.innerWidth,900)*(window.devicePixelRatio||1)));
+  const c = p.s ? await renderPageCanvas(p,{width:wpx}) : blankCanvas(p, wpx/Math.max(p.blank.w,p.blank.h));
+  if(pv!==i) return; const img=new Image(); img.alt="Сторінка "+(i+1); img.src=c.toDataURL("image/jpeg",.9); body.textContent=""; body.appendChild(img);
+}
+function closePreview(){ $("modal").hidden=true; pv=-1; }
+$("mClose").onclick=closePreview; $("mPrev").onclick=()=>openPreview(pv-1); $("mNext").onclick=()=>openPreview(pv+1);
+$("mSel").onclick=()=>{ const p=S.pages[pv]; if(!p) return; if(S.sel.has(p.k)) S.sel.delete(p.k); else S.sel.add(p.k); paintSel(); $("mSel").textContent=S.sel.has(p.k)?"Зняти виділення":"Виділити"; };
+$("modal").addEventListener("click", e=>{ if(e.target.id==="mBody"||e.target.id==="modal") closePreview(); });
+
+/* ---------- wiring ---------- */
+$("openBtn").onclick=$("addBtn").onclick=$("bannerOpen").onclick=()=>$("fileIn").click();
+$("fileIn").onchange=e=>{ addFiles(e.target.files); e.target.value=""; };
+$("insFileBtn").onclick=()=>$("insIn").click();
+$("insIn").onchange=e=>{ addFiles(e.target.files, insertIndex()); e.target.value=""; };
+$("undoBtn").onclick=undo; $("redoBtn").onclick=redo;
+$("selAllBtn").onclick=()=>{ S.pages.forEach(p=>S.sel.add(p.k)); paintSel(); };
+$("selNoneBtn").onclick=()=>{ S.sel.clear(); paintSel(); };
+$("selEvenBtn").onclick=()=>{ S.sel=new Set(S.pages.filter((_,i)=>i%2===1).map(p=>p.k)); paintSel(); };
+$("selOddBtn").onclick=()=>{ S.sel=new Set(S.pages.filter((_,i)=>i%2===0).map(p=>p.k)); paintSel(); };
+$("rotLBtn").onclick=()=>rotate(-90); $("rotRBtn").onclick=()=>rotate(90);
+$("moveLBtn").onclick=()=>shift(-1); $("moveRBtn").onclick=()=>shift(1);
+$("delBtn").onclick=delSel; $("blankBtn").onclick=insertBlank; $("dupBtn").onclick=duplicate;
+$("saveAllBtn").onclick=saveAll; $("saveSelBtn").onclick=saveSel; $("extractBtn").onclick=extract; $("pngBtn").onclick=exportPng;
+$("splitBtn").onclick=split;
+$("outName").addEventListener("input",()=>{ S.nameEdited=true; });
+$("extractRange").addEventListener("keydown",e=>{ if(e.key==="Enter") extract(); });
+document.querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>{ $("splitN").value=b.dataset.n; render(); });
+$("splitN").addEventListener("input",render); $("splitRanges").addEventListener("input",render);
+document.querySelectorAll('input[name="sm"]').forEach(r=>r.addEventListener("change",()=>{ const m=document.querySelector('input[name="sm"]:checked').value; $("fEvery").hidden=m!=="every"; $("fRanges").hidden=m!=="ranges"; render(); }));
+const tabs=["split","export","insert"];
+tabs.forEach(t=>$("tab-"+t).onclick=()=>{ S.tab=t; tabs.forEach(x=>{ $("tab-"+x).setAttribute("aria-selected",x===t?"true":"false"); $("p-"+x).hidden=x!==t; }); render(); });
+
+document.addEventListener("keydown", e=>{
+  if(!$("modal").hidden){ if(e.key==="Escape") closePreview(); if(e.key==="ArrowLeft") openPreview(pv-1); if(e.key==="ArrowRight") openPreview(pv+1); return; }
+  const typing=/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
+  if(typing) return;
+  const mod=e.ctrlKey||e.metaKey;
+  if(mod && e.key.toLowerCase()==="z"){ e.preventDefault(); e.shiftKey?redo():undo(); }
+  else if(mod && e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); }
+  else if(mod && e.key.toLowerCase()==="a"){ e.preventDefault(); S.pages.forEach(p=>S.sel.add(p.k)); paintSel(); }
+  else if(e.key==="Delete"||e.key==="Backspace"){ if(S.sel.size){ e.preventDefault(); delSel(); } }
+  else if(e.key==="Escape"){ S.sel.clear(); paintSel(); }
+});
+
+/* ---------- sample document ---------- */
+async function makeSample(){
+  const d=await PDFDocument.create(); const f=await d.embedFont(StandardFonts.Helvetica); const fb=await d.embedFont(StandardFonts.HelveticaBold);
+  const N=24, ink=rgb(.15,.28,.79), grey=rgb(.86,.88,.91);
+  for(let i=0;i<N;i++){
+    const pg=d.addPage(A4); const H=A4[1];
+    pg.drawRectangle({x:0,y:H-64,width:A4[0],height:64,color:ink});
+    pg.drawText("SAMPLE DOCUMENT",{x:40,y:H-40,size:15,font:fb,color:rgb(1,1,1)});
+    pg.drawText("page "+(i+1)+" / "+N,{x:A4[0]-140,y:H-40,size:12,font:f,color:rgb(1,1,1)});
+    const s=String(i+1); const sz=220; pg.drawText(s,{x:(A4[0]-fb.widthOfTextAtSize(s,sz))/2,y:430,size:sz,font:fb,color:ink});
+    for(let j=0;j<9;j++) pg.drawRectangle({x:48,y:360-j*26,width:500-(j%3)*70,height:8,color:grey});
+    pg.drawRectangle({x:48,y:60,width:500,height:1,color:grey});
+    pg.drawText("Palitur PDF sample",{x:48,y:42,size:9,font:f,color:rgb(.5,.53,.58)});
   }
+  return d.save();
+}
+(async()=>{
+  render();
+  try{
+    busy("Готую приклад…",.5);
+    const bytes=await makeSample();
+    const src=await loadSource("Приклад — 24 сторінки.pdf", bytes, true);
+    for(let i=0;i<src.count;i++) S.pages.push({k:uid(),s:src.id,i,r:0});
+  }catch(e){ console.error(e); }
+  idle(); render();
+})();
+})();
 </script>
-
-</body>
-</html>
