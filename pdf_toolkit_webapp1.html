@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Інструменти — Редактор та Розділювач</title>
+  
+  <!-- Бібліотеки для роботи з PDF та ZIP прямо в браузері -->
+  <script src="https://unpkg.com/pdf-lib@1.17.9/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --success: #16a34a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 30px 15px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    
+    header { text-align: center; margin-bottom: 25px; }
+    header h1 { font-size: 1.8rem; color: #0f172a; margin-bottom: 8px; }
+    header p { color: var(--text-muted); font-size: 0.95rem; }
+
+    /* Вкладки */
+    .tabs { display: flex; gap: 8px; border-bottom: 2px solid var(--border); margin-bottom: 20px; overflow-x: auto; }
+    .tab-btn {
+      padding: 10px 18px;
+      background: none;
+      border: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--primary); }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* Панелі вмісту */
+    .tab-content { display: none; background: var(--card-bg); padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid var(--border); }
+    .tab-content.active { display: block; }
+
+    /* Поля вводу та кнопки */
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
+    input[type="file"], input[type="number"], input[type="text"], select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.95rem;
+      outline: none;
+    }
+    input[type="file"] { background: #f1f5f9; cursor: pointer; }
+    .hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+
+    button.btn-action {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+    button.btn-action:hover { background: var(--primary-hover); }
+    button.btn-action:disabled { background: #94a3b8; cursor: not-allowed; }
+
+    /* Статус/Логи */
+    .status-box {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      display: none;
+    }
+    .status-box.info { display: block; background: #e0f2fe; color: #0369a1; }
+    .status-box.success { display: block; background: #dcfce7; color: #15803d; }
+    .status-box.error { display: block; background: #fee2e2; color: #b91c1c; }
+
+    .file-info {
+      background: #f8fafc;
+      border: 1px dashed var(--border);
+      padding: 10px;
+      border-radius: 6px;
+      margin-top: 8px;
+      font-size: 0.85rem;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>🛠️ PDF Інструменти</h1>
+    <p>Швидка обробка файлів безпосередньо у вашому браузері (100% приватно)</p>
+  </header>
+
+  <!-- Навігаційні вкладки -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('split-n')">✂️ Поділити по N сторінок</button>
+    <button class="tab-btn" onclick="switchTab('merge')">📑 Об'єднати PDF</button>
+    <button class="tab-btn" onclick="switchTab('extract-delete')">🗑️ Видалити / Вибрати</button>
+    <button class="tab-btn" onclick="switchTab('append')">➕ Додати сторінки</button>
+  </div>
+
+  <!-- ВКЛАДКА 1: Поділ по N сторінок (10 сторінок за операцію) -->
+  <div id="tab-split-n" class="tab-content active">
+    <h3>Швидкий поділ на рівні частини (по 10 сторінок)</h3>
+    <p class="hint" style="margin-bottom: 15px;">Файл автоматично розділиться на фрагменти та збережеться у вигляді ZIP-архіву.</p>
+    
+    <div class="form-group">
+      <label>Оберіть PDF файл:</label>
+      <input type="file" id="split-file" accept="application/pdf">
+      <div id="split-info" class="file-info"></div>
+    </div>
+
+    <div class="form-group">
+      <label>Кількість сторінок у кожній частині:</label>
+      <input type="number" id="split-chunk-size" value="10" min="1">
+      <div class="hint">За замовчуванням: 10 сторінок на один файл (1-10, 11-20 і т.д.).</div>
+    </div>
+
+    <button class="btn-action" id="btn-split-n" onclick="splitByNPages()">
+      Розділити та завантажити ZIP
+    </button>
+    <div id="status-split-n" class="status-box"></div>
+  </div>
+
+  <!-- ВКЛАДКА 2: Об'єднання файлів -->
+  <div id="tab-merge" class="tab-content">
+    <h3>Об'єднання декількох PDF у один</h3>
+    <p class="hint" style="margin-bottom: 15px;">Оберіть кілька файлів одночасно (файли будуть зшиті у вибраному порядку).</p>
+
+    <div class="form-group">
+      <label>Оберіть PDF файли (можна вибрати декілька):</label>
+      <input type="file" id="merge-files" accept="application/pdf" multiple>
+      <div id="merge-info" class="file-info"></div>
+    </div>
+
+    <button class="btn-action" id="btn-merge" onclick="mergePdfs()">
+      Об'єднати та зберегти
+    </button>
+    <div id="status-merge" class="status-box"></div>
+  </div>
+
+  <!-- ВКЛАДКА 3: Видалення або вибірковий експорт сторінок -->
+  <div id="tab-extract-delete" class="tab-content">
+    <h3>Видалити або витягти окремі сторінки</h3>
+    
+    <div class="form-group">
+      <label>Оберіть PDF файл:</label>
+      <input type="file" id="filter-file" accept="application/pdf">
+      <div id="filter-info" class="file-info"></div>
+    </div>
+
+    <div class="form-group">
+      <label>Дія зі сторінками:</label>
+      <select id="filter-mode">
+        <option value="keep">Залишити тільки вказані сторінки (витягти)</option>
+        <option value="delete">Видалити вказані сторінки</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Номери сторінок або діапазони:</label>
+      <input type="text" id="filter-pages" placeholder="Наприклад: 1, 3-5, 8">
+      <div class="hint">Вказуйте номери через кому або через дефіс. Нумерація починається з 1.</div>
+    </div>
+
+    <button class="btn-action" id="btn-filter" onclick="filterPages()">
+      Обробити та зберегти
+    </button>
+    <div id="status-filter" class="status-box"></div>
+  </div>
+
+  <!-- ВКЛАДКА 4: Додавання / вставка сторінок -->
+  <div id="tab-append" class="tab-content">
+    <h3>Додати сторінки з іншого файлу</h3>
+    
+    <div class="form-group">
+      <label>Основний PDF документ:</label>
+      <input type="file" id="base-file" accept="application/pdf">
+    </div>
+
+    <div class="form-group">
+      <label>Додатковий PDF (сторінки якого треба додати):</label>
+      <input type="file" id="addon-file" accept="application/pdf">
+    </div>
+
+    <div class="form-group">
+      <label>Куди вставити:</label>
+      <select id="append-position">
+        <option value="end">У кінець основного документа</option>
+        <option value="start">На початок основного документа</option>
+      </select>
+    </div>
+
+    <button class="btn-action" id="btn-append" onclick="appendPdf()">
+      Зшити разом та завантажити
+    </button>
+    <div id="status-append" class="status-box"></div>
+  </div>
+</div>
+
+<script>
+  // Перемикання вкладок
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    
+    event.currentTarget.classList.add('active');
+    document.getElementById(`tab-${tabId}`).classList.add('active');
+  }
+
+  // Інформація про вибраний файл
+  function setupFileInfo(inputId, infoId) {
+    document.getElementById(inputId).addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      const infoBox = document.getElementById(infoId);
+      if (!file) {
+        infoBox.style.display = 'none';
+        return;
+      }
+      infoBox.style.display = 'block';
+      infoBox.textContent = `Завантаження інфо: ${file.name}...`;
+
+      try {
+        const bytes = await file.arrayBuffer();
+        const doc = await PDFLib.PDFDocument.load(bytes);
+        infoBox.textContent = `Файл: ${file.name} | Всього сторінок: ${doc.getPageCount()} | Розмір: ${(file.size / 1024 / 1024).toFixed(2)} МБ`;
+      } catch (err) {
+        infoBox.textContent = `Помилка читання PDF: ${err.message}`;
+      }
+    });
+  }
+
+  setupFileInfo('split-file', 'split-info');
+  setupFileInfo('filter-file', 'filter-info');
+
+  // Індикатор стану
+  function setStatus(elementId, text, type = 'info') {
+    const el = document.getElementById(elementId);
+    el.className = `status-box ${type}`;
+    el.textContent = text;
+  }
+
+  // 1. Поділ на N сторінок (наприклад, по 10 сторінок за раз)
+  async function splitByNPages() {
+    const fileInput = document.getElementById('split-file');
+    const chunkSizeInput = document.getElementById('split-chunk-size');
+    const chunkSize = parseInt(chunkSizeInput.value, 10);
+
+    if (!fileInput.files.length) {
+      return setStatus('status-split-n', 'Будь ласка, оберіть файл PDF.', 'error');
+    }
+    if (!chunkSize || chunkSize < 1) {
+      return setStatus('status-split-n', 'Введіть коректну кількість сторінок (1 або більше).', 'error');
+    }
+
+    const btn = document.getElementById('btn-split-n');
+    btn.disabled = true;
+    setStatus('status-split-n', 'Обробка та розбиття документа...', 'info');
+
+    try {
+      const file = fileInput.files[0];
+      const baseName = file.name.replace(/\.[^/.]+$/, "");
+      const arrayBuffer = await file.arrayBuffer();
+      const srcDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+      const totalPages = srcDoc.getPageCount();
+
+      const zip = new JSZip();
+      let partNumber = 1;
+
+      for (let i = 0; i < totalPages; i += chunkSize) {
+        const newDoc = await PDFLib.PDFDocument.create();
+        const end = Math.min(i + chunkSize, totalPages);
+        
+        // Масив індексів сторінок (0-based)
+        const pageIndices = [];
+        for (let j = i; j < end; j++) {
+          pageIndices.push(j);
+        }
+
+        const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
+        copiedPages.forEach(p => newDoc.addPage(p));
+
+        const pdfBytes = await newDoc.save();
+        const fileName = `${baseName}_частина_${partNumber}_стор_${i + 1}-${end}.pdf`;
+        zip.file(fileName, pdfBytes);
+
+        setStatus('status-split-n', `Створено частину ${partNumber} (сторінки ${i + 1}–${end})...`, 'info');
+        partNumber++;
+      }
+
+      setStatus('status-split-n', 'Створення ZIP-архіву...', 'info');
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      saveAs(zipBlob, `${baseName}_розділений_по_${chunkSize}_стор.zip`);
+
+      setStatus('status-split-n', `Готово! Успішно створено ${partNumber - 1} файл(ів) у ZIP.`, 'success');
+    } catch (err) {
+      console.error(err);
+      setStatus('status-split-n', `Помилка: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // 2. Об'єднання файлів
+  async function mergePdfs() {
+    const fileInput = document.getElementById('merge-files');
+    if (fileInput.files.length < 2) {
+      return setStatus('status-merge', 'Будь ласка, виберіть щонайменше 2 файли для об’єднання.', 'error');
+    }
+
+    const btn = document.getElementById('btn-merge');
+    btn.disabled = true;
+    setStatus('status-merge', 'Об’єднання файлів...', 'info');
+
+    try {
+      const mergedPdf = await PDFLib.PDFDocument.create();
+
+      for (let i = 0; i < fileInput.files.length; i++) {
+        const file = fileInput.files[i];
+        setStatus('status-merge', `Додавання файлу (${i + 1}/${fileInput.files.length}): ${file.name}...`, 'info');
+        
+        const bytes = await file.arrayBuffer();
+        const doc = await PDFLib.PDFDocument.load(bytes);
+        const copiedPages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+        copiedPages.forEach(p => mergedPdf.addPage(p));
+      }
+
+      const mergedPdfBytes = await mergedPdf.save();
+      const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+      saveAs(blob, 'merged_document.pdf');
+
+      setStatus('status-merge', 'Файли успішно об’єднано та збережено!', 'success');
+    } catch (err) {
+      console.error(err);
+      setStatus('status-merge', `Помилка: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Парсер діапазонів (наприклад: "1, 3-5, 8") -> Set(0-based індекси)
+  function parsePageRanges(str, maxPages) {
+    const indices = new Set();
+    const parts = str.split(',').map(s => s.trim()).filter(Boolean);
+
+    for (const part of parts) {
+      if (part.includes('-')) {
+        const [start, end] = part.split('-').map(n => parseInt(n.trim(), 10));
+        if (isNaN(start) || isNaN(end)) continue;
+        for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
+          if (i >= 1 && i <= maxPages) indices.add(i - 1);
+        }
+      } else {
+        const num = parseInt(part, 10);
+        if (!isNaN(num) && num >= 1 && num <= maxPages) {
+          indices.add(num - 1);
+        }
+      }
+    }
+    return indices;
+  }
+
+  // 3. Видалення або вибірковий експорт
+  async function filterPages() {
+    const fileInput = document.getElementById('filter-file');
+    const mode = document.getElementById('filter-mode').value;
+    const pagesStr = document.getElementById('filter-pages').value.trim();
+
+    if (!fileInput.files.length) {
+      return setStatus('status-filter', 'Будь ласка, оберіть файл PDF.', 'error');
+    }
+    if (!pagesStr) {
+      return setStatus('status-filter', 'Вкажіть номери або діапазони сторінок.', 'error');
+    }
+
+    const btn = document.getElementById('btn-filter');
+    btn.disabled = true;
+    setStatus('status-filter', 'Обробка сторінок...', 'info');
+
+    try {
+      const file = fileInput.files[0];
+      const bytes = await file.arrayBuffer();
+      const srcDoc = await PDFLib.PDFDocument.load(bytes);
+      const totalPages = srcDoc.getPageCount();
+
+      const targetIndices = parsePageRanges(pagesStr, totalPages);
+      if (targetIndices.size === 0) {
+        throw new Error('Не знайдено жодної коректної сторінки з вказаного діапазону.');
+      }
+
+      let finalIndices = [];
+      if (mode === 'keep') {
+        finalIndices = Array.from(targetIndices).sort((a, b) => a - b);
+      } else {
+        for (let i = 0; i < totalPages; i++) {
+          if (!targetIndices.has(i)) finalIndices.push(i);
+        }
+      }
+
+      if (finalIndices.length === 0) {
+        throw new Error('У результаті операції не залишилося жодної сторінки.');
+      }
+
+      const newDoc = await PDFLib.PDFDocument.create();
+      const copiedPages = await newDoc.copyPages(srcDoc, finalIndices);
+      copiedPages.forEach(p => newDoc.addPage(p));
+
+      const pdfBytes = await newDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      saveAs(blob, `edited_${file.name}`);
+
+      setStatus('status-filter', `Успішно! Сформовано новий документ на ${finalIndices.length} стор.`, 'success');
+    } catch (err) {
+      console.error(err);
+      setStatus('status-filter', `Помилка: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // 4. Додавання сторінок
+  async function appendPdf() {
+    const baseInput = document.getElementById('base-file');
+    const addonInput = document.getElementById('addon-file');
+    const position = document.getElementById('append-position').value;
+
+    if (!baseInput.files.length || !addonInput.files.length) {
+      return setStatus('status-append', 'Оберіть обидва файли (основний та додатковий).', 'error');
+    }
+
+    const btn = document.getElementById('btn-append');
+    btn.disabled = true;
+    setStatus('status-append', 'Зшивання сторінок...', 'info');
+
+    try {
+      const baseBytes = await baseInput.files[0].arrayBuffer();
+      const addonBytes = await addonInput.files[0].arrayBuffer();
+
+      const baseDoc = await PDFLib.PDFDocument.load(baseBytes);
+      const addonDoc = await PDFLib.PDFDocument.load(addonBytes);
+
+      const newDoc = await PDFLib.PDFDocument.create();
+
+      const basePages = await newDoc.copyPages(baseDoc, baseDoc.getPageIndices());
+      const addonPages = await newDoc.copyPages(addonDoc, addonDoc.getPageIndices());
+
+      if (position === 'start') {
+        addonPages.forEach(p => newDoc.addPage(p));
+        basePages.forEach(p => newDoc.addPage(p));
+      } else {
+        basePages.forEach(p => newDoc.addPage(p));
+        addonPages.forEach(p => newDoc.addPage(p));
+      }
+
+      const pdfBytes = await newDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      saveAs(blob, `combined_${baseInput.files[0].name}`);
+
+      setStatus('status-append', 'Сторінки успішно додано та збережено!', 'success');
+    } catch (err) {
+      console.error(err);
+      setStatus('status-append', `Помилка: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+</script>
+
+</body>
+</html>
