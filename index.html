@@ -1,3 +1,8 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Палітурня PDF</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,6 +31,10 @@
   --c1:#8da3ff; --c2:#4fc7a6; --c3:#e3a54a; --c4:#e57cb8; --c5:#a993f5; --c6:#5ec3e8; color-scheme:dark}
 
 *{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+img{max-width:100%}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -168,7 +177,8 @@ kbd{font-family:var(--f-mono);font-size:11px;border:1px solid var(--line);border
 .keys{display:flex;flex-wrap:wrap;gap:6px 12px;color:var(--muted);font-size:12px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
-
+</head>
+<body>
 <div class="app">
   <header class="top">
     <div class="logo">
@@ -857,3 +867,6 @@ async function makeSample(){
 })();
 })();
 </script>
+
+</body>
+</html>
